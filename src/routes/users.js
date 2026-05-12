@@ -126,29 +126,19 @@ export default async function usersRoutes(fastify) {
 
   fastify.post('/users/:user_id/upload-avatar', async (request, reply) => {
     const { user_id: userId } = request.params ?? {}
-    const uid = String(userId)
-    const safeId = uid.replace(/[/\\]/g, '_')
-    const objectPath = `avatars/${safeId}.jpg`
 
-    let part
-    try {
-      part = await request.file()
-    } catch (err) {
-      fastify.log.error(err)
-      return reply.code(400).send({ error: 'Multipart file upload required' })
-    }
+    const data = await request.file()
 
-    if (!part) {
+    if (!data) {
       return reply.code(400).send({ error: 'No file provided' })
     }
 
-    const buffer = await part.toBuffer()
-    const contentType = part.mimetype || 'image/jpeg'
+    const buffer = await data.toBuffer()
+    const fileName = 'avatars/' + userId + '.jpg'
 
-    const { error: uploadError } = await supabase.storage.from('logos').upload(objectPath, buffer, {
-      contentType,
-      upsert: true,
-    })
+    const { error: uploadError } = await supabase.storage
+      .from('logos')
+      .upload(fileName, buffer, { upsert: true, contentType: data.mimetype })
 
     if (uploadError) {
       fastify.log.error(uploadError)
@@ -157,12 +147,12 @@ export default async function usersRoutes(fastify) {
 
     const {
       data: { publicUrl },
-    } = supabase.storage.from('logos').getPublicUrl(objectPath)
+    } = supabase.storage.from('logos').getPublicUrl(fileName)
 
     const { error: updateError } = await supabase
       .from('user_profiles')
       .update({ avatar_url: publicUrl })
-      .eq('user_id', uid)
+      .eq('user_id', String(userId))
 
     if (updateError) {
       fastify.log.error(updateError)
