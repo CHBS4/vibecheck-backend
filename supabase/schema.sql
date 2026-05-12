@@ -91,6 +91,20 @@ create index if not exists friend_requests_sender_id_idx on public.friend_reques
 create index if not exists friend_requests_status_idx on public.friend_requests (status);
 
 -- ---------------------------------------------------------------------------
+-- Direct messages between users
+-- ---------------------------------------------------------------------------
+create table if not exists public.messages (
+  id uuid primary key default gen_random_uuid(),
+  sender_id text not null,
+  receiver_id text not null,
+  content text not null,
+  created_at timestamptz default now()
+);
+
+create index if not exists messages_sender_receiver_created_at_idx on public.messages (sender_id, receiver_id, created_at asc);
+create index if not exists messages_receiver_sender_created_at_idx on public.messages (receiver_id, sender_id, created_at asc);
+
+-- ---------------------------------------------------------------------------
 -- Row Level Security (anon key used from this API)
 -- Tighten these policies when you add Supabase Auth or move to service role.
 -- ---------------------------------------------------------------------------
@@ -100,6 +114,7 @@ alter table public.checkins enable row level security;
 alter table public.snaps enable row level security;
 alter table public.user_profiles enable row level security;
 alter table public.friend_requests enable row level security;
+alter table public.messages enable row level security;
 
 -- Allow the anon role to perform operations this backend needs.
 -- For production, prefer SUPABASE_SERVICE_ROLE_KEY on the server and stricter RLS.
@@ -124,6 +139,9 @@ create policy "friend_requests_insert_anon" on public.friend_requests for insert
 create policy "friend_requests_update_anon" on public.friend_requests for update to anon using (true) with check (true);
 create policy "friend_requests_delete_anon" on public.friend_requests for delete to anon using (true);
 
+create policy "messages_select_anon" on public.messages for select to anon using (true);
+create policy "messages_insert_anon" on public.messages for insert to anon with check (true);
+
 -- ---------------------------------------------------------------------------
 -- Grants (anon key used by this API)
 -- ---------------------------------------------------------------------------
@@ -135,3 +153,4 @@ grant select, insert on public.checkins to anon;
 grant select, insert on public.snaps to anon;
 grant select, insert, update on public.user_profiles to anon;
 grant select, insert, update, delete on public.friend_requests to anon;
+grant select, insert on public.messages to anon;

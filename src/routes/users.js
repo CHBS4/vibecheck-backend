@@ -274,6 +274,72 @@ export default async function usersRoutes(fastify) {
     return reply.code(200).send({ friends: sorted })
   })
 
+  fastify.post('/messages', async (request, reply) => {
+    const { sender_id: senderId, receiver_id: receiverId, content } = request.body ?? {}
+
+    if (!senderId || !receiverId) {
+      return reply.code(400).send({ error: 'sender_id and receiver_id are required' })
+    }
+
+    if (typeof content !== 'string' || !content.trim()) {
+      return reply.code(400).send({ error: 'content is required and must be a non-empty string' })
+    }
+
+    const { data, error } = await supabase
+      .from('messages')
+      .insert({
+        sender_id: String(senderId),
+        receiver_id: String(receiverId),
+        content: content.trim(),
+      })
+      .select()
+      .single()
+
+    if (error) {
+      fastify.log.error(error)
+      return reply.code(500).send({ error: error.message })
+    }
+
+    return reply.code(201).send({ message: data })
+  })
+
+  fastify.get('/messages/:user_id/:other_user_id', async (request, reply) => {
+    const { user_id: a, other_user_id: b } = request.params ?? {}
+    const uid1 = String(a)
+    const uid2 = String(b)
+
+    const [outward, inward] = await Promise.all([
+      supabase
+        .from('messages')
+        .select('*')
+        .eq('sender_id', uid1)
+        .eq('receiver_id', uid2)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('messages')
+        .select('*')
+        .eq('sender_id', uid2)
+        .eq('receiver_id', uid1)
+        .order('created_at', { ascending: true }),
+    ])
+
+    if (outward.error) {
+      fastify.log.error(outward.error)
+      return reply.code(500).send({ error: outward.error.message })
+    }
+
+    if (inward.error) {
+      fastify.log.error(inward.error)
+      return reply.code(500).send({ error: inward.error.message })
+    }
+
+    const merged = [...(outward.data ?? []), ...(inward.data ?? [])].sort(
+      (x, y) => new Date(x.created_at).getTime() - new Date(y.created_at).getTime(),
+    )
+
+    return reply.code(200).send({ messages: merged })
+  })
+
   fastify.put('/user/location', async (request, reply) => {
     const { user_id: userId, city } = request.body ?? {}
 
