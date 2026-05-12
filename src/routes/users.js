@@ -124,42 +124,20 @@ export default async function usersRoutes(fastify) {
     return reply.code(200).send({ profile: data })
   })
 
-  fastify.post('/users/:user_id/upload-avatar', async (request, reply) => {
-    const { user_id: userId } = request.params ?? {}
-
-    const data = await request.file()
-
-    if (!data) {
-      return reply.code(400).send({ error: 'No file provided' })
-    }
-
-    const buffer = await data.toBuffer()
+  fastify.post('/users/:user_id/avatar-base64', async (request, reply) => {
+    const { user_id: userId } = request.params
+    const { base64, contentType } = request.body
+    const buffer = Buffer.from(base64, 'base64')
     const fileName = 'avatars/' + userId + '.jpg'
-
     const { error: uploadError } = await supabase.storage
       .from('logos')
-      .upload(fileName, buffer, { upsert: true, contentType: data.mimetype })
-
-    if (uploadError) {
-      fastify.log.error(uploadError)
-      return reply.code(500).send({ error: uploadError.message })
-    }
-
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from('logos').getPublicUrl(fileName)
-
-    const { error: updateError } = await supabase
+      .upload(fileName, buffer, { upsert: true, contentType: contentType || 'image/jpeg' })
+    if (uploadError) return reply.code(500).send({ error: uploadError.message })
+    const { data } = supabase.storage.from('logos').getPublicUrl(fileName)
+    await supabase
       .from('user_profiles')
-      .update({ avatar_url: publicUrl })
-      .eq('user_id', String(userId))
-
-    if (updateError) {
-      fastify.log.error(updateError)
-      return reply.code(500).send({ error: updateError.message })
-    }
-
-    return reply.code(200).send({ avatar_url: publicUrl })
+      .upsert({ user_id: userId, avatar_url: data.publicUrl }, { onConflict: 'user_id' })
+    return reply.send({ avatar_url: data.publicUrl })
   })
 
   fastify.post('/friends/request', async (request, reply) => {
