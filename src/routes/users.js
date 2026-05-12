@@ -97,6 +97,33 @@ export default async function usersRoutes(fastify) {
     return reply.code(200).send({ profile: data })
   })
 
+  fastify.put('/users/:user_id/avatar', async (request, reply) => {
+    const { user_id: userId } = request.params ?? {}
+    const { avatar_url: avatarUrl } = request.body ?? {}
+
+    if (typeof avatarUrl !== 'string') {
+      return reply.code(400).send({ error: 'avatar_url is required and must be a string' })
+    }
+
+    const payload = {
+      user_id: String(userId),
+      avatar_url: avatarUrl.trim(),
+    }
+
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .upsert(payload, { onConflict: 'user_id' })
+      .select('user_id, username, display_name, avatar_url')
+      .single()
+
+    if (error) {
+      fastify.log.error(error)
+      return reply.code(500).send({ error: error.message })
+    }
+
+    return reply.code(200).send({ profile: data })
+  })
+
   fastify.put('/user/location', async (request, reply) => {
     const { user_id: userId, city } = request.body ?? {}
 
