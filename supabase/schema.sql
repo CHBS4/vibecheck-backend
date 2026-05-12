@@ -65,13 +65,18 @@ create index if not exists snaps_expires_at_idx on public.snaps (expires_at);
 create table if not exists public.user_profiles (
   user_id text primary key,
   username text unique,
+  email text unique,
   display_name text,
   avatar_url text,
   city text,
   created_at timestamptz default now()
 );
 
+-- For databases that pre-date the email column.
+alter table public.user_profiles add column if not exists email text unique;
+
 create index if not exists user_profiles_username_idx on public.user_profiles (username);
+create index if not exists user_profiles_email_idx on public.user_profiles (email);
 
 -- ---------------------------------------------------------------------------
 -- Friend requests
