@@ -60,6 +60,20 @@ create index if not exists snaps_event_id_idx on public.snaps (event_id);
 create index if not exists snaps_expires_at_idx on public.snaps (expires_at);
 
 -- ---------------------------------------------------------------------------
+-- User profiles (username + metadata)
+-- ---------------------------------------------------------------------------
+create table if not exists public.user_profiles (
+  user_id text primary key,
+  username text unique,
+  display_name text,
+  avatar_url text,
+  city text,
+  created_at timestamptz default now()
+);
+
+create index if not exists user_profiles_username_idx on public.user_profiles (username);
+
+-- ---------------------------------------------------------------------------
 -- Row Level Security (anon key used from this API)
 -- Tighten these policies when you add Supabase Auth or move to service role.
 -- ---------------------------------------------------------------------------
@@ -67,6 +81,7 @@ alter table public.users enable row level security;
 alter table public.events enable row level security;
 alter table public.checkins enable row level security;
 alter table public.snaps enable row level security;
+alter table public.user_profiles enable row level security;
 
 -- Allow the anon role to perform operations this backend needs.
 -- For production, prefer SUPABASE_SERVICE_ROLE_KEY on the server and stricter RLS.
@@ -82,6 +97,10 @@ create policy "checkins_select_anon" on public.checkins for select to anon using
 create policy "snaps_select_anon" on public.snaps for select to anon using (true);
 create policy "snaps_insert_anon" on public.snaps for insert to anon with check (true);
 
+create policy "user_profiles_select_anon" on public.user_profiles for select to anon using (true);
+create policy "user_profiles_upsert_anon" on public.user_profiles for insert to anon with check (true);
+create policy "user_profiles_update_anon" on public.user_profiles for update to anon using (true) with check (true);
+
 -- ---------------------------------------------------------------------------
 -- Grants (anon key used by this API)
 -- ---------------------------------------------------------------------------
@@ -91,3 +110,4 @@ grant select, update on public.users to anon;
 grant select on public.events to anon;
 grant select, insert on public.checkins to anon;
 grant select, insert on public.snaps to anon;
+grant select, insert, update on public.user_profiles to anon;
