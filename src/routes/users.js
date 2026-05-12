@@ -124,6 +124,156 @@ export default async function usersRoutes(fastify) {
     return reply.code(200).send({ profile: data })
   })
 
+  fastify.post('/friends/request', async (request, reply) => {
+    const { sender_id: senderId, receiver_id: receiverId } = request.body ?? {}
+
+    if (!senderId || !receiverId) {
+      return reply.code(400).send({ error: 'sender_id and receiver_id are required' })
+    }
+
+    const sender = String(senderId)
+    const receiver = String(receiverId)
+
+    if (sender === receiver) {
+      return reply.code(400).send({ error: 'sender_id and receiver_id must differ' })
+    }
+
+    const { data, error } = await supabase
+      .from('friend_requests')
+      .insert({ sender_id: sender, receiver_id: receiver, status: 'pending' })
+      .select()
+      .single()
+
+    if (error) {
+      if (error.code === '23505') {
+        return reply.code(409).send({ error: 'Friend request already exists between these users' })
+      }
+      fastify.log.error(error)
+      return reply.code(500).send({ error: error.message })
+    }
+
+    return reply.code(201).send({ request: data })
+  })
+
+  fastify.get('/friends/requests/:user_id', async (request, reply) => {
+    const { user_id: userId } = request.params ?? {}
+    const uid = String(userId)
+
+    const { data: reqs, error } = await supabase
+      .from('friend_requests')
+      .select('*')
+      .eq('receiver_id', uid)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      fastify.log.error(error)
+      return reply.code(500).send({ error: error.message })
+    }
+
+    const list = reqs ?? []
+    const senderIds = [...new Set(list.map((r) => r.sender_id))]
+    let bySender = {}
+
+    if (senderIds.length > 0) {
+      const { data: profiles, error: profilesError } = await supabase
+        .from('user_profiles')
+        .select('user_id, username')
+        .in('user_id', senderIds)
+
+      if (profilesError) {
+        fastify.log.error(profilesError)
+        return reply.code(500).send({ error: profilesError.message })
+      }
+
+      bySender = Object.fromEntries((profiles ?? []).map((p) => [p.user_id, p.username]))
+    }
+
+    const requests = list.map((r) => ({
+      ...r,
+      sender_username: bySender[r.sender_id] ?? null,
+    }))
+
+    return reply.code(200).send({ requests })
+  })
+
+  fastify.put('/friends/request/:id/accept', async (request, reply) => {
+    const { id } = request.params ?? {}
+
+    const { data, error } = await supabase
+      .from('friend_requests')
+      .update({ status: 'accepted' })
+      .eq('id', id)
+      .select()
+      .maybeSingle()
+
+    if (error) {
+      fastify.log.error(error)
+      return reply.code(500).send({ error: error.message })
+    }
+
+    if (!data) {
+      return reply.code(404).send({ error: 'Friend request not found' })
+    }
+
+    return reply.code(200).send({ request: data })
+  })
+
+  fastify.delete('/friends/request/:id', async (request, reply) => {
+    const { id } = request.params ?? {}
+
+    const { data, error } = await supabase.from('friend_requests').delete().eq('id', id).select().maybeSingle()
+
+    if (error) {
+      fastify.log.error(error)
+      return reply.code(500).send({ error: error.message })
+    }
+
+    if (!data) {
+      return reply.code(404).send({ error: 'Friend request not found' })
+    }
+
+    return reply.code(200).send({ ok: true, request: data })
+  })
+
+  fastify.get('/friends/:user_id', async (request, reply) => {
+    const { user_id: userId } = request.params ?? {}
+    const uid = String(userId)
+
+    const { data: rows, error } = await supabase
+      .from('friend_requests')
+      .select('*')
+      .eq('status', 'accepted')
+      .or(`sender_id.eq.${uid},receiver_id.eq.${uid}`)
+
+    if (error) {
+      fastify.log.error(error)
+      return reply.code(500).send({ error: error.message })
+    }
+
+    const friendships = rows ?? []
+    const friendIds = friendships.map((r) => (r.sender_id === uid ? r.receiver_id : r.sender_id))
+
+    if (friendIds.length === 0) {
+      return reply.code(200).send({ friends: [] })
+    }
+
+    const { data: profiles, error: profilesError } = await supabase
+      .from('user_profiles')
+      .select('user_id, username, display_name, avatar_url')
+      .in('user_id', friendIds)
+
+    if (profilesError) {
+      fastify.log.error(profilesError)
+      return reply.code(500).send({ error: profilesError.message })
+    }
+
+    const order = new Map(friendIds.map((id, i) => [id, i]))
+    const sorted = [...(profiles ?? [])].sort((a, b) => (order.get(a.user_id) ?? 0) - (order.get(b.user_id) ?? 0))
+
+    return reply.code(200).send({ friends: sorted })
+  })
+
   fastify.put('/user/location', async (request, reply) => {
     const { user_id: userId, city } = request.body ?? {}
 

@@ -74,6 +74,23 @@ create table if not exists public.user_profiles (
 create index if not exists user_profiles_username_idx on public.user_profiles (username);
 
 -- ---------------------------------------------------------------------------
+-- Friend requests
+-- ---------------------------------------------------------------------------
+create table if not exists public.friend_requests (
+  id uuid primary key default gen_random_uuid(),
+  sender_id text not null,
+  receiver_id text not null,
+  status text not null default 'pending',
+  created_at timestamptz default now(),
+  constraint friend_requests_no_self check (sender_id <> receiver_id),
+  unique (sender_id, receiver_id)
+);
+
+create index if not exists friend_requests_receiver_id_idx on public.friend_requests (receiver_id);
+create index if not exists friend_requests_sender_id_idx on public.friend_requests (sender_id);
+create index if not exists friend_requests_status_idx on public.friend_requests (status);
+
+-- ---------------------------------------------------------------------------
 -- Row Level Security (anon key used from this API)
 -- Tighten these policies when you add Supabase Auth or move to service role.
 -- ---------------------------------------------------------------------------
@@ -82,6 +99,7 @@ alter table public.events enable row level security;
 alter table public.checkins enable row level security;
 alter table public.snaps enable row level security;
 alter table public.user_profiles enable row level security;
+alter table public.friend_requests enable row level security;
 
 -- Allow the anon role to perform operations this backend needs.
 -- For production, prefer SUPABASE_SERVICE_ROLE_KEY on the server and stricter RLS.
@@ -101,6 +119,11 @@ create policy "user_profiles_select_anon" on public.user_profiles for select to 
 create policy "user_profiles_upsert_anon" on public.user_profiles for insert to anon with check (true);
 create policy "user_profiles_update_anon" on public.user_profiles for update to anon using (true) with check (true);
 
+create policy "friend_requests_select_anon" on public.friend_requests for select to anon using (true);
+create policy "friend_requests_insert_anon" on public.friend_requests for insert to anon with check (true);
+create policy "friend_requests_update_anon" on public.friend_requests for update to anon using (true) with check (true);
+create policy "friend_requests_delete_anon" on public.friend_requests for delete to anon using (true);
+
 -- ---------------------------------------------------------------------------
 -- Grants (anon key used by this API)
 -- ---------------------------------------------------------------------------
@@ -111,3 +134,4 @@ grant select on public.events to anon;
 grant select, insert on public.checkins to anon;
 grant select, insert on public.snaps to anon;
 grant select, insert, update on public.user_profiles to anon;
+grant select, insert, update, delete on public.friend_requests to anon;
