@@ -1,5 +1,13 @@
 import { supabase } from '../db/supabase.js'
 
+const IMG_PREFIX = '[IMG]'
+
+function snapUrlFromMessageContent(trimmedContent) {
+  if (!trimmedContent.startsWith(IMG_PREFIX)) return null
+  const url = trimmedContent.slice(IMG_PREFIX.length).trim()
+  return url || null
+}
+
 export default async function usersRoutes(fastify) {
   fastify.post('/users/username', async (request, reply) => {
     const { user_id: userId, username, email } = request.body ?? {}
@@ -321,15 +329,19 @@ export default async function usersRoutes(fastify) {
       return reply.code(400).send({ error: 'content is required and must be a non-empty string' })
     }
 
-    const { data, error } = await supabase
-      .from('messages')
-      .insert({
-        sender_id: String(senderId),
-        receiver_id: String(receiverId),
-        content: content.trim(),
-      })
-      .select()
-      .single()
+    const trimmed = content.trim()
+    const snap_url = snapUrlFromMessageContent(trimmed)
+
+    const row = {
+      sender_id: String(senderId),
+      receiver_id: String(receiverId),
+      content: trimmed,
+    }
+    if (snap_url !== null) {
+      row.snap_url = snap_url
+    }
+
+    const { data, error } = await supabase.from('messages').insert(row).select().single()
 
     if (error) {
       fastify.log.error(error)

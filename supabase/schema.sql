@@ -103,8 +103,12 @@ create table if not exists public.messages (
   sender_id text not null,
   receiver_id text not null,
   content text not null,
+  snap_url text,
   created_at timestamptz default now()
 );
+
+-- For databases that pre-date snap_url on messages.
+alter table public.messages add column if not exists snap_url text;
 
 create index if not exists messages_sender_receiver_created_at_idx on public.messages (sender_id, receiver_id, created_at asc);
 create index if not exists messages_receiver_sender_created_at_idx on public.messages (receiver_id, sender_id, created_at asc);
