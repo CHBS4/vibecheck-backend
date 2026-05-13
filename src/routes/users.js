@@ -1,13 +1,5 @@
 import { supabase } from '../db/supabase.js'
 
-const IMG_PREFIX = '[IMG]'
-
-function snapUrlFromMessageContent(trimmedContent) {
-  if (!trimmedContent.startsWith(IMG_PREFIX)) return null
-  const url = trimmedContent.slice(IMG_PREFIX.length).trim()
-  return url || null
-}
-
 export default async function usersRoutes(fastify) {
   fastify.post('/users/username', async (request, reply) => {
     const { user_id: userId, username, email } = request.body ?? {}
@@ -319,7 +311,7 @@ export default async function usersRoutes(fastify) {
   })
 
   fastify.post('/messages', async (request, reply) => {
-    const { sender_id: senderId, receiver_id: receiverId, content } = request.body ?? {}
+    const { sender_id: senderId, receiver_id: receiverId, content, snap_url: snapUrl } = request.body ?? {}
 
     if (!senderId || !receiverId) {
       return reply.code(400).send({ error: 'sender_id and receiver_id are required' })
@@ -329,19 +321,18 @@ export default async function usersRoutes(fastify) {
       return reply.code(400).send({ error: 'content is required and must be a non-empty string' })
     }
 
-    const trimmed = content.trim()
-    const snap_url = snapUrlFromMessageContent(trimmed)
-
     const row = {
       sender_id: String(senderId),
       receiver_id: String(receiverId),
-      content: trimmed,
-    }
-    if (snap_url !== null) {
-      row.snap_url = snap_url
+      content: content.trim(),
+      snap_url: typeof snapUrl === 'string' && snapUrl.trim() ? snapUrl.trim() : null,
     }
 
-    const { data, error } = await supabase.from('messages').insert(row).select().single()
+    const { data, error } = await supabase
+      .from('messages')
+      .insert(row)
+      .select('id, sender_id, receiver_id, content, snap_url, created_at')
+      .single()
 
     if (error) {
       fastify.log.error(error)
@@ -359,13 +350,13 @@ export default async function usersRoutes(fastify) {
     const [outward, inward] = await Promise.all([
       supabase
         .from('messages')
-        .select('*')
+        .select('id, sender_id, receiver_id, content, snap_url, created_at')
         .eq('sender_id', uid1)
         .eq('receiver_id', uid2)
         .order('created_at', { ascending: true }),
       supabase
         .from('messages')
-        .select('*')
+        .select('id, sender_id, receiver_id, content, snap_url, created_at')
         .eq('sender_id', uid2)
         .eq('receiver_id', uid1)
         .order('created_at', { ascending: true }),
