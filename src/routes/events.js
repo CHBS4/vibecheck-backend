@@ -23,7 +23,109 @@ function clampHypeScore(value) {
   return Math.min(100, Math.max(0, value))
 }
 
+async function acceptedFriendIdsFor(userId) {
+  const uid = String(userId)
+  const { data, error } = await supabase
+    .from('friend_requests')
+    .select('sender_id, receiver_id')
+    .eq('status', 'accepted')
+    .or(`sender_id.eq.${uid},receiver_id.eq.${uid}`)
+
+  if (error) throw error
+
+  const friends = new Set()
+  for (const row of data ?? []) {
+    if (row.sender_id === uid) friends.add(row.receiver_id)
+    else if (row.receiver_id === uid) friends.add(row.sender_id)
+  }
+  return Array.from(friends)
+}
+
 export default async function eventsRoutes(fastify) {
+  fastify.post('/premium-events', async (request, reply) => {
+    const {
+      creator_id: creatorId,
+      title,
+      description,
+      lat,
+      lng,
+      address,
+      date,
+      visibility,
+    } = request.body ?? {}
+
+    if (creatorId === undefined || creatorId === null || String(creatorId).trim() === '') {
+      return reply.code(400).send({ error: 'creator_id is required' })
+    }
+
+    if (typeof title !== 'string' || !title.trim()) {
+      return reply.code(400).send({ error: 'title is required' })
+    }
+
+    const latNum = typeof lat === 'number' ? lat : Number(lat)
+    const lngNum = typeof lng === 'number' ? lng : Number(lng)
+    if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) {
+      return reply.code(400).send({ error: 'lat and lng are required and must be numbers' })
+    }
+
+    const row = {
+      creator_id: String(creatorId).trim(),
+      title: title.trim(),
+      description: description != null && String(description).trim() ? String(description).trim() : null,
+      lat: latNum,
+      lng: lngNum,
+      address: address != null && String(address).trim() ? String(address).trim() : null,
+      date: date != null && String(date).trim() ? String(date).trim() : null,
+      visibility:
+        typeof visibility === 'string' && visibility.trim() ? visibility.trim() : 'friends_only',
+    }
+
+    const { data, error } = await supabase.from('premium_events').insert(row).select().single()
+
+    if (error) {
+      fastify.log.error(error)
+      return reply.code(500).send({ error: error.message })
+    }
+
+    return reply.code(201).send({ premium_event: data })
+  })
+
+  fastify.get('/premium-events', async (request, reply) => {
+    const { visibility, user_id: userId } = request.query ?? {}
+    const wantPublic = visibility === 'public_premium'
+    const hasUserId = userId !== undefined && userId !== null && String(userId).trim() !== ''
+
+    let query = supabase.from('premium_events').select('*')
+
+    if (hasUserId) {
+      const uid = String(userId).trim()
+      let creatorIds = [uid]
+      try {
+        const friends = await acceptedFriendIdsFor(uid)
+        creatorIds = [...creatorIds, ...friends]
+      } catch (err) {
+        fastify.log.error(err)
+        return reply.code(500).send({ error: err.message })
+      }
+      query = query.in('creator_id', creatorIds)
+    }
+
+    if (wantPublic) {
+      query = query.eq('visibility', 'public_premium')
+    }
+
+    query = query.order('date', { ascending: true })
+
+    const { data, error } = await query
+
+    if (error) {
+      fastify.log.error(error)
+      return reply.code(500).send({ error: error.message })
+    }
+
+    return { premium_events: data ?? [] }
+  })
+
   fastify.get('/events', async (request, reply) => {
     const { city } = request.query
 
