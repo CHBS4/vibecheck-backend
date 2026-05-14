@@ -126,6 +126,23 @@ export default async function eventsRoutes(fastify) {
     return { premium_events: data ?? [] }
   })
 
+  fastify.delete('/premium-events/:id', async (request, reply) => {
+    const { id } = request.params ?? {}
+
+    const { data, error } = await supabase.from('premium_events').delete().eq('id', id).select('id').maybeSingle()
+
+    if (error) {
+      fastify.log.error(error)
+      return reply.code(500).send({ error: error.message })
+    }
+
+    if (!data) {
+      return reply.code(404).send({ error: 'Not found' })
+    }
+
+    return reply.code(200).send({ ok: true })
+  })
+
   fastify.get('/events', async (request, reply) => {
     const { city } = request.query
 
