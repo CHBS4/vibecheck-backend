@@ -30,6 +30,29 @@ export default async function usersRoutes(fastify) {
     return reply.code(200).send({ profile: data })
   })
 
+  fastify.post('/users/check-username', async (request, reply) => {
+    const { username } = request.body ?? {}
+
+    if (typeof username !== 'string' || !username.trim()) {
+      return reply.code(400).send({ error: 'username is required' })
+    }
+
+    const trimmed = username.trim()
+
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('user_id')
+      .eq('username', trimmed)
+      .maybeSingle()
+
+    if (error) {
+      fastify.log.error(error)
+      return reply.code(500).send({ error: error.message })
+    }
+
+    return reply.code(200).send({ available: !data })
+  })
+
   fastify.get('/users/:user_id/profile', async (request, reply) => {
     const { user_id: userId } = request.params ?? {}
     const lookup = String(userId)
