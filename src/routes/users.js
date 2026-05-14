@@ -171,12 +171,12 @@ export default async function usersRoutes(fastify) {
     const { user_id: userId } = request.params
     const { base64, contentType } = request.body
     const buffer = Buffer.from(base64, 'base64')
-    const fileName = 'avatars/' + userId + '.jpg'
+    const fileName = userId + '.jpg'
     const { error: uploadError } = await supabase.storage
-      .from('logos')
+      .from('avatars')
       .upload(fileName, buffer, { upsert: true, contentType: contentType || 'image/jpeg' })
     if (uploadError) return reply.code(500).send({ error: uploadError.message })
-    const { data } = supabase.storage.from('logos').getPublicUrl(fileName)
+    const { data } = supabase.storage.from('avatars').getPublicUrl(fileName)
     await supabase
       .from('user_profiles')
       .upsert({ user_id: userId, avatar_url: data.publicUrl }, { onConflict: 'user_id' })
